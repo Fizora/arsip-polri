@@ -1,6 +1,6 @@
 "use client";
 import Sidebar from "@/components/Sidebar";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   FileText,
   Shield,
@@ -12,24 +12,23 @@ import {
   ImageIcon,
   VideoIcon,
   Eye,
+  X,
 } from "lucide-react";
 
 /**
- * Archive page with authentication popup:
- * - Modal shows minimal 2-step UI:
- *    Step 1: credentials (NRP/Email + password)
- *    Step 2: RFID scan (keyboard-emulating scanner only)
- * - After RFID: additional code inputs shown depending on document status:
- *    Super Rahasia -> ENCR + Reporter Key (3FA)
- *    Rahasia -> ENCR (2FA)
- *    Pembatasan -> Admin code
- *    Umum -> only RFID
+ * Perubahan yang dilakukan:
+ * - archiveData: hanya 1 dummy item.
+ * - Modal: dipisah jadi dua overlay terpisah:
+ *    - Auth modal (muncul pertama, berisi langkah autentikasi)
+ *    - Detail modal (muncul hanya setelah autentikasi sukses).
+ * - LEFT di detail modal: menampilkan history anggota & aset (foto/video/dokumen).
+ * - RIGHT di detail modal: menampilkan informasi arsip (seperti sebelumnya).
  *
- * Notes:
- * - This is a demo: validation is mocked client-side. Replace with secure server calls.
- * - RFID step accepts only scanner input (no manual input).
+ * Catatan: validasi masih mock; tinggal hubungkan ke backend pada fungsi verifyCredentials,
+ * handleRfidScanned, finalizeAccess untuk integrasi nyata.
  */
 
+/* ============ Dummy data (sesuai perintah: cukup 1 item) ============ */
 const archiveData = [
   {
     id: 1,
@@ -46,67 +45,69 @@ const archiveData = [
     bookmarked: false,
     encryptionCode: "ENCR-9988",
     reporterKey: "RK-ALPHA-01",
-  },
-  {
-    id: 2,
-    title: "Surat Tugas Operasi Aman",
-    type: "Umum",
-    date: "2025-08-15",
-    lastOpened: "2025-08-19 15:30",
-    owner: "user.arsip",
-    sensitive: false,
-    priority: false,
-    description:
-      "Surat tugas operasi pengamanan wilayah. Dapat diakses via RFID resmi.",
-    views: 7,
-    bookmarked: true,
-  },
-  {
-    id: 3,
-    title: "Data Personel Khusus",
-    type: "Rahasia",
-    date: "2025-08-10",
-    lastOpened: "2025-08-18 21:00",
-    owner: "supervisor",
-    sensitive: true,
-    priority: true,
-    description:
-      "Data personel khusus untuk operasi rahasia. Akses memerlukan RFID + kode enkripsi dari pelapor.",
-    views: 5,
-    bookmarked: false,
-    encryptionCode: "ENCR-5566",
-  },
-  {
-    id: 4,
-    title: "Dokumen Rapat Strategi",
-    type: "Pembatasan",
-    date: "2025-07-22",
-    lastOpened: "2025-08-01 11:00",
-    owner: "kapolres",
-    sensitive: false,
-    priority: false,
-    description:
-      "Dokumen berlaku terbatas — memerlukan verifikasi admin khusus.",
-    views: 3,
-    bookmarked: false,
-    adminCode: "ADM-2025-01",
-  },
-  {
-    id: 5,
-    title: "Laporan Keuangan Internal",
-    type: "Umum",
-    date: "2025-06-05",
-    lastOpened: "2025-06-10 08:30",
-    owner: "bendahara",
-    sensitive: false,
-    priority: false,
-    description: "Laporan keuangan unit. Akses: RFID valid.",
-    views: 9,
-    bookmarked: false,
+    // demo history & aset — frontend-only, bisa diganti oleh backend nanti
+    history: [
+      { id: 1, name: "A. Susanto", role: "Operator", time: "2025-08-20 09:12" },
+      { id: 2, name: "B. Rahma", role: "Supervisor", time: "2025-08-19 15:30" },
+      { id: 3, name: "C. Wibowo", role: "Admin", time: "2025-08-18 21:00" },
+    ],
+    assets: [
+      {
+        id: "img-1",
+        type: "image",
+        label: "Foto Lokasi 1",
+        src: "/demo/photo1.jpg",
+      },
+      {
+        id: "vid-1",
+        type: "video",
+        label: "Rekaman 1",
+        src: "/demo/video1.mp4",
+      },
+      {
+        id: "doc-1",
+        type: "document",
+        label: "Lampiran.pdf",
+        src: "/demo/file1.pdf",
+      },
+    ],
   },
 ];
 
-function formatDate(dateStr) {
+// TypeScript: define types for archive, history, asset
+interface ArchiveHistory {
+  id: number;
+  name: string;
+  role: string;
+  time: string;
+}
+
+interface ArchiveAsset {
+  id: string;
+  type: "image" | "video" | "document";
+  label: string;
+  src: string;
+}
+
+interface Archive {
+  id: number;
+  title: string;
+  type: "Super Rahasia" | "Rahasia" | "Pembatasan" | "Umum";
+  date: string;
+  lastOpened: string;
+  owner: string;
+  sensitive: boolean;
+  priority: boolean;
+  description: string;
+  views: number;
+  bookmarked: boolean;
+  encryptionCode: string;
+  reporterKey: string;
+  history: ArchiveHistory[];
+  assets: ArchiveAsset[];
+}
+
+function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("id-ID", {
     day: "2-digit",
     month: "long",
@@ -117,33 +118,21 @@ function formatDate(dateStr) {
 const PAGE_SIZE = 9;
 
 export default function ArchivePage() {
-  const [data, setData] = useState(archiveData);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState(null);
-
-  // authentication modal states
-  const [authStep, setAuthStep] = useState("credentials"); // 'credentials' | 'rfid' | 'codes' | 'success'
-  const [loading, setLoading] = useState(false);
-  const [info, setInfo] = useState(null);
-  const [error, setError] = useState(null);
-
-  // credentials
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-
-  // scanner buffer (for RFID)
-  const bufferRef = useRef("");
-  const lastKeyTimeRef = useRef(0);
-  const timeoutRef = useRef(null);
-  const [rfidBusy, setRfidBusy] = useState(false);
-
-  // post-RFID inputs (codes)
-  const [encryptionInput, setEncryptionInput] = useState("");
-  const [reporterInput, setReporterInput] = useState("");
-  const [adminInput, setAdminInput] = useState("");
-
-  // search & pagination
+  // State hanya untuk UI, tidak ada logic backend
+  const [search, setSearch] = useState<string>("");
+  const [page, setPage] = useState<number>(1);
+  const [selected, setSelected] = useState<Archive | null>(null);
+  const [authStep, setAuthStep] = useState<string>("credentials");
+  const [identifier, setIdentifier] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [encryptionInput, setEncryptionInput] = useState<string>("");
+  const [reporterInput, setReporterInput] = useState<string>("");
+  const [adminInput, setAdminInput] = useState<string>("");
+  const [rfidBusy, setRfidBusy] = useState<boolean>(false);
+  const [info, setInfo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const PAGE_SIZE = 9;
+  const data = archiveData;
   const filtered = data.filter(
     (it) =>
       it.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -152,8 +141,8 @@ export default function ArchivePage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // open card -> reset auth UI and open modal
-  function openDetail(item) {
+  // Hanya UI, tidak ada logic autentikasi/validasi
+  function openDetail(item: Archive): void {
     setSelected(item);
     setAuthStep("credentials");
     setIdentifier("");
@@ -165,182 +154,7 @@ export default function ArchivePage() {
     setAdminInput("");
     setRfidBusy(false);
   }
-
-  // credentials verification (mock)
-  async function verifyCredentials(e) {
-    e?.preventDefault();
-    setError(null);
-    if (!identifier.trim() || !password.trim()) {
-      setError("NRP/Email dan Password wajib diisi.");
-      return;
-    }
-    setLoading(true);
-    setInfo("Memeriksa kredensial...");
-    await new Promise((r) => setTimeout(r, 600));
-    // demo: accept any non-empty credentials
-    setLoading(false);
-    setInfo(null);
-    // next: go to RFID step if RFID is required by doc type
-    setAuthStep("rfid");
-  }
-
-  // global keydown listener only when authStep === 'rfid'
-  useEffect(() => {
-    if (authStep !== "rfid") return;
-    // only if modal open and selected exists
-    if (!selected) return;
-    setError(null);
-    setInfo("Menunggu scan RFID... (scanner keyboard-emulating)");
-    function resetBuffer() {
-      bufferRef.current = "";
-      lastKeyTimeRef.current = 0;
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    }
-    function onKeyDown(e) {
-      if (rfidBusy) return;
-      const now = Date.now();
-      if (lastKeyTimeRef.current && now - lastKeyTimeRef.current > 1000) {
-        bufferRef.current = ""; // slow typing -> reset
-      }
-      lastKeyTimeRef.current = now;
-
-      if (e.key === "Enter") {
-        const code = bufferRef.current.trim();
-        bufferRef.current = "";
-        lastKeyTimeRef.current = 0;
-        e.preventDefault();
-        if (code) handleRfidScanned(code);
-        else setError("Tidak ada data yang ter-scan. Coba lagi.");
-        return;
-      }
-
-      if (e.key.length === 1) {
-        bufferRef.current += e.key;
-      }
-
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      timeoutRef.current = setTimeout(() => {
-        bufferRef.current = "";
-        lastKeyTimeRef.current = 0;
-      }, 1200);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      resetBuffer();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authStep, rfidBusy, selected]);
-
-  async function handleRfidScanned(code) {
-    setRfidBusy(true);
-    setError(null);
-    setInfo("Memverifikasi RFID...");
-    await new Promise((r) => setTimeout(r, 600));
-    // demo validation rule
-    if (code && code.length >= 3 && code !== "000") {
-      setInfo("RFID terdeteksi — lanjut verifikasi selanjutnya.");
-      setRfidBusy(false);
-      // decide next step depending on selected.type
-      if (!selected) return;
-      if (selected.type === "Umum") {
-        setAuthStep("success");
-        finalizeSuccess();
-      } else if (selected.type === "Rahasia") {
-        setAuthStep("codes");
-      } else if (selected.type === "Super Rahasia") {
-        setAuthStep("codes");
-      } else if (selected.type === "Pembatasan") {
-        setAuthStep("codes");
-      } else {
-        setAuthStep("success");
-        finalizeSuccess();
-      }
-    } else {
-      setRfidBusy(false);
-      setError("RFID tidak valid. Silakan scan ulang.");
-      setInfo("Menunggu scan RFID...");
-    }
-  }
-
-  // finalize: validate codes (if any) then grant access
-  async function finalizeAccess() {
-    setError(null);
-    setLoading(true);
-    setInfo("Memverifikasi kode...");
-    await new Promise((r) => setTimeout(r, 600));
-
-    if (!selected) return;
-    if (selected.type === "Rahasia") {
-      if ((encryptionInput || "").trim() !== (selected.encryptionCode || "")) {
-        setError("Kode enkripsi salah.");
-        setLoading(false);
-        setInfo(null);
-        return;
-      }
-    } else if (selected.type === "Super Rahasia") {
-      if ((encryptionInput || "").trim() !== (selected.encryptionCode || "")) {
-        setError("Kode enkripsi salah.");
-        setLoading(false);
-        setInfo(null);
-        return;
-      }
-      if ((reporterInput || "").trim() !== (selected.reporterKey || "")) {
-        setError("Kunci pelapor salah.");
-        setLoading(false);
-        setInfo(null);
-        return;
-      }
-    } else if (selected.type === "Pembatasan") {
-      if ((adminInput || "").trim() !== (selected.adminCode || "")) {
-        setError("Kode pembatasan/admin salah.");
-        setLoading(false);
-        setInfo(null);
-        return;
-      }
-    }
-
-    // success: update views, show success, close after short delay
-    setData((prev) =>
-      prev.map((it) =>
-        it.id === selected.id ? { ...it, views: (it.views || 0) + 1 } : it
-      )
-    );
-    setLoading(false);
-    setInfo(null);
-    setAuthStep("success");
-    setTimeout(() => {
-      // close modal automatically
-      setSelected(null);
-      setAuthStep("credentials");
-      setIdentifier("");
-      setPassword("");
-      setEncryptionInput("");
-      setReporterInput("");
-      setAdminInput("");
-    }, 900);
-  }
-
-  function finalizeSuccess() {
-    // for 'Umum' path we already incremented views in handleRfidScanned? we do here for safety
-    if (!selected) return;
-    setData((prev) =>
-      prev.map((it) =>
-        it.id === selected.id ? { ...it, views: (it.views || 0) + 1 } : it
-      )
-    );
-    setTimeout(() => {
-      // auto close
-      setSelected(null);
-      setAuthStep("credentials");
-    }, 800);
-  }
-
-  // close modal on overlay click
-  function closeModal() {
+  function closeModal(): void {
     setSelected(null);
     setAuthStep("credentials");
     setInfo(null);
@@ -352,7 +166,7 @@ export default function ArchivePage() {
     setAdminInput("");
   }
 
-  const toggleBookmark = (id) => {
+  const toggleBookmark = (id: number): void => {
     setData((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, bookmarked: !item.bookmarked } : item
@@ -364,7 +178,7 @@ export default function ArchivePage() {
     <div className="min-h-screen bg-zinc-950 flex">
       <Sidebar />
       <main className="flex-1 p-6 lg:p-10 text-gray-200 h-screen overflow-y-auto">
-        {/* Header (keep consistent with your requested header earlier) */}
+        {/* Header */}
         <header className="mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
             <h1 className="text-3xl lg:text-4xl font-bold text-white tracking-tight mb-1 leading-tight">
@@ -380,7 +194,7 @@ export default function ArchivePage() {
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
           <input
             type="text"
-            className="w-full sm:w-64 px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-900 text-gray-200 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            className="w-full sm:w-64 px-4 py-2 rounded-sm border border-zinc-800 bg-zinc-900 text-gray-200 focus:outline-none focus:ring-2 focus:ring-yellow-400"
             placeholder="Cari arsip..."
             value={search}
             onChange={(e) => {
@@ -390,7 +204,7 @@ export default function ArchivePage() {
           />
           <div className="flex gap-2 items-center">
             <button
-              className="px-3 py-2 rounded-lg bg-zinc-800 text-gray-200 hover:bg-yellow-400 hover:text-black transition"
+              className="px-3 py-2 rounded-sm bg-zinc-800 text-gray-200 hover:bg-yellow-400 hover:text-black transition"
               disabled={page === 1}
               onClick={() => setPage(page - 1)}
             >
@@ -400,7 +214,7 @@ export default function ArchivePage() {
               Halaman {page} / {totalPages}
             </span>
             <button
-              className="px-3 py-2 rounded-lg bg-zinc-800 text-gray-200 hover:bg-yellow-400 hover:text-black transition"
+              className="px-3 py-2 rounded-sm bg-zinc-800 text-gray-200 hover:bg-yellow-400 hover:text-black transition"
               disabled={page === totalPages}
               onClick={() => setPage(page + 1)}
             >
@@ -409,7 +223,7 @@ export default function ArchivePage() {
           </div>
         </div>
 
-        {/* Cards (tap/klik kartu untuk membuka autentikasi) */}
+        {/* Cards */}
         <section>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {paginated.map((item) => (
@@ -456,10 +270,17 @@ export default function ArchivePage() {
                   </button>
                 </div>
 
-                <h2 className="text-lg font-bold text-white mb-1">{item.title}</h2>
+                <h2 className="text-lg font-bold text-white mb-1">
+                  {item.title}
+                </h2>
 
                 <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
-                  <Star size={14} className={item.priority ? "text-yellow-400" : "text-gray-600"} />
+                  <Star
+                    size={14}
+                    className={
+                      item.priority ? "text-yellow-400" : "text-gray-600"
+                    }
+                  />
                   <span>{item.priority ? "Prioritas" : "Normal"}</span>
                 </div>
 
@@ -472,197 +293,349 @@ export default function ArchivePage() {
 
                 <div className="flex items-center gap-2 mt-2">
                   <Eye size={16} className="text-yellow-400" />
-                  <span className="text-xs text-gray-300">{item.views} anggota telah mengakses</span>
+                  <span className="text-xs text-gray-300">
+                    {item.views} anggota telah mengakses
+                  </span>
                 </div>
 
-                <div className="mt-3 text-xs text-gray-400">Tap/klik kartu untuk lihat detail & autentikasi akses</div>
+                <div className="mt-3 text-xs text-gray-400">
+                  Tap/klik kartu untuk lihat detail & autentikasi akses
+                </div>
               </div>
             ))}
           </div>
         </section>
 
-        {/* Modal: minimal-auth style inside popup */}
-        {selected && (
+        {/* ===== AUTH MODAL (popup pertama) - tampil hanya saat selected && authStep !== 'success' ===== */}
+        {selected && authStep !== "success" && (
           <div
             className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4"
-            onClick={closeModal} // klik overlay menutup modal
+            onClick={closeModal}
             role="dialog"
             aria-modal="true"
           >
             <div
-              className="bg-zinc-900 rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md sm:max-w-2xl lg:max-w-4xl relative text-gray-200 border border-zinc-800 overflow-y-auto max-h-[92vh]"
+              className="bg-zinc-900 rounded-sm shadow-2xl p-6 w-full max-w-sm relative text-gray-200 border border-zinc-800"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Logo tengah */}
-              <div className="flex justify-center -mt-6">
-                <img
-                  src="/logo.png"
-                  alt="Logo"
-                  className="w-28 h-28 sm:w-36 sm:h-36 object-cover rounded-full drop-shadow-md"
-                />
+              {/* Close */}
+              <button
+                onClick={closeModal}
+                className="absolute top-3 right-3 text-gray-400 hover:text-white"
+              >
+                <X />
+              </button>
+
+              <div className="text-center mb-4">
+                <h3 className="text-lg font-semibold text-white">
+                  Autentikasi Arsip
+                </h3>
+                <div className="text-xs text-gray-400 mt-1">
+                  {selected.type} • {selected.owner}
+                </div>
               </div>
 
-              {/* Header short */}
-              <div className="text-center mt-3 mb-4">
-                <h3 className="text-lg font-semibold text-white">{selected.title}</h3>
-                <div className="text-xs text-gray-400 mt-1">{selected.type} • {selected.owner}</div>
+              {/* Authentication Steps (credentials / rfid / codes) */}
+              <div>
+                {authStep === "credentials" && (
+                  <form className="space-y-3">
+                    <label className="text-xs text-gray-300">NRP / Email</label>
+                    <input
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      className="w-full px-3 py-2 rounded-md bg-zinc-900 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                      placeholder="NRP / Email"
+                      autoComplete="username"
+                    />
+                    <label className="text-xs text-gray-300">Password</label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full px-3 py-2 rounded-md bg-zinc-900 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                      placeholder="•••••"
+                      autoComplete="current-password"
+                    />
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        type="button"
+                        className="flex-1 px-3 py-1.5 rounded-md bg-yellow-500 text-black text-sm font-medium"
+                        onClick={() => setAuthStep("rfid")}
+                      >
+                        Lanjutkan
+                      </button>
+                      <button
+                        type="button"
+                        onClick={closeModal}
+                        className="px-3 py-1.5 rounded-md bg-zinc-800 text-xs text-gray-200"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {authStep === "rfid" && (
+                  <div className="space-y-3 text-center">
+                    <div className="text-xs text-gray-300">
+                      Langkah 2 — Scan RFID (scanner keyboard-emulating)
+                    </div>
+                    <div className="mx-auto w-60 h-45 rounded-md flex items-center justify-center border border-zinc-700 mb-1">
+                      <svg
+                        className={`w-8 h-8 text-gray-400`}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                      >
+                        <path d="M12 2v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        <path d="M12 18v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        <path d="M4 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        <path d="M16 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                    <div className="flex items-center justify-center gap-2 mt-2">
+                      <span className="text-xs text-gray-400">
+                        Silakan dekatkan kartu ke RFID reader terdaftar.
+                      </span>
+                    </div>
+                    <div className="flex gap-2 mt-2 justify-center">
+                      <button
+                        onClick={() => setAuthStep("credentials")}
+                        className="px-3 py-1.5 rounded-md bg-zinc-800 text-xs text-gray-200"
+                      >
+                        Kembali
+                      </button>
+                      <button
+                        onClick={() => setAuthStep("codes")}
+                        className="px-3 py-1.5 rounded-md bg-zinc-800 text-xs text-gray-200"
+                      >
+                        Simulasi Scan RFID
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {authStep === "codes" && (
+                  <div className="space-y-3">
+                    {selected?.type === "Rahasia" && (
+                      <>
+                        <div className="text-xs text-gray-300">Masukkan kode enkripsi</div>
+                        <input
+                          value={encryptionInput}
+                          onChange={(e) => setEncryptionInput(e.target.value)}
+                          className="w-full px-3 py-2 rounded-md bg-zinc-900 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                          placeholder="ENCR-XXXX"
+                        />
+                      </>
+                    )}
+
+                    {selected?.type === "Super Rahasia" && (
+                      <>
+                        <div className="text-xs text-gray-300">Masukkan kode enkripsi</div>
+                        <input
+                          value={encryptionInput}
+                          onChange={(e) => setEncryptionInput(e.target.value)}
+                          className="w-full px-3 py-2 rounded-md bg-zinc-900 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                          placeholder="ENCR-XXXX"
+                        />
+                        <div className="text-xs text-gray-300">Masukkan kunci pelapor</div>
+                        <input
+                          value={reporterInput}
+                          onChange={(e) => setReporterInput(e.target.value)}
+                          className="w-full px-3 py-2 rounded-md bg-zinc-900 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                          placeholder="Kunci Pelapor"
+                        />
+                      </>
+                    )}
+
+                    {selected?.type === "Pembatasan" && (
+                      <>
+                        <div className="text-xs text-gray-300">Masukkan kode pembatasan/admin</div>
+                        <input
+                          value={adminInput}
+                          onChange={(e) => setAdminInput(e.target.value)}
+                          className="w-full px-3 py-2 rounded-md bg-zinc-900 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                          placeholder="Kode Pembatasan"
+                        />
+                      </>
+                    )}
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => setAuthStep("success")}
+                        className="px-3 py-1.5 rounded-md bg-yellow-500 text-black text-sm"
+                      >
+                        Verifikasi & Akses
+                      </button>
+                      <button
+                        onClick={() => setAuthStep("rfid")}
+                        className="px-3 py-1.5 rounded-md bg-zinc-800 text-xs text-gray-200"
+                      >
+                        Kembali
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* modal content area */}
+              <div className="mt-4 text-xs text-gray-500 text-center">
+                Autentikasi aman — gantikan mock validation dengan API backend
+                saat integrasi.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===== DETAIL MODAL (popup kedua) - tampil hanya setelah authStep === 'success' ===== */}
+        {selected && authStep === "success" && (
+          <div
+            className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4"
+            onClick={closeModal}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div
+              className="bg-zinc-900 rounded-sm shadow-2xl p-4 sm:p-6 w-full max-w-3xl relative text-gray-200 border border-zinc-800 overflow-y-auto max-h-[92vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close */}
+              <button
+                onClick={closeModal}
+                className="absolute top-3 right-3 text-gray-400 hover:text-white"
+              >
+                <X />
+              </button>
+
+              {/* Header */}
+              <div className="text-center mt-1 mb-4">
+                <h3 className="text-lg font-semibold text-white">
+                  {selected.title}
+                </h3>
+                <div className="text-xs text-gray-400 mt-1">
+                  {selected.type} • {selected.owner}
+                </div>
+              </div>
+
+              {/* DETAIL: LEFT = HISTORY & ASSETS  | RIGHT = INFO */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* LEFT: doc info */}
+                {/* LEFT: history & assets */}
                 <div className="sm:col-span-1 flex flex-col gap-3 border-r border-zinc-800 pr-3">
-                  <div className="text-sm text-gray-300">Tanggal</div>
-                  <div className="text-sm text-gray-200 font-semibold">{formatDate(selected.date)}</div>
-
-                  <div className="mt-2 text-sm text-gray-300">Status Akses</div>
-                  <div className={`inline-block mt-1 px-2 py-1 rounded text-xs font-bold ${selected.type === "Super Rahasia" ? "bg-red-500 text-white" : selected.type === "Rahasia" ? "bg-yellow-400 text-black" : selected.type === "Pembatasan" ? "bg-blue-400 text-white" : "bg-green-400 text-black"}`}>
-                    {selected.type}
+                  <div>
+                    <div className="text-sm font-semibold text-white mb-1">
+                      History Akses
+                    </div>
+                    <ul className="text-xs text-gray-300 divide-y divide-zinc-800">
+                      {selected.history?.map((h) => (
+                        <li key={h.id} className="py-2 flex items-start gap-2">
+                          <UserIcon className="w-5 h-5 text-yellow-400 mt-0.5" />
+                          <div>
+                            <div className="font-semibold text-sm text-gray-100">
+                              {h.name}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {h.role} • {h.time}
+                            </div>
+                          </div>
+                        </li>
+                      )) || (
+                        <li className="text-xs text-gray-400">
+                          Tidak ada history
+                        </li>
+                      )}
+                    </ul>
                   </div>
 
-                  <div className="mt-3 text-xs text-gray-400">{selected.description}</div>
+                  <div>
+                    <div className="text-sm font-semibold text-white mb-1">
+                      Aset Terkait
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {selected.assets?.map((a) => (
+                        <div
+                          key={a.id}
+                          className="text-xs text-gray-300 bg-zinc-800 rounded p-2 flex flex-col items-center"
+                        >
+                          <div className="mb-1">
+                            {a.type === "image" ? (
+                              <ImageIcon className="w-6 h-6 text-yellow-400" />
+                            ) : a.type === "video" ? (
+                              <VideoIcon className="w-6 h-6 text-yellow-400" />
+                            ) : (
+                              <FileIcon className="w-6 h-6 text-yellow-400" />
+                            )}
+                          </div>
+                          <div className="text-center text-[11px]">
+                            {a.label}
+                          </div>
+                        </div>
+                      )) || (
+                        <div className="text-xs text-gray-400">
+                          Tidak ada aset
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                {/* CENTER: description / info */}
-                <div className="sm:col-span-1 flex flex-col gap-3">
-                  <div className="text-sm font-semibold text-white">Informasi Arsip</div>
-                  <div className="text-sm text-gray-100 bg-zinc-800 rounded-md p-3 shadow-inner">{selected.description}</div>
-                </div>
-
-                {/* RIGHT: Authentication minimal UI */}
-                <div className="sm:col-span-1 flex flex-col gap-3">
-                  <div className="text-sm font-semibold text-white flex items-center justify-between">
-                    <span>Autentikasi</span>
-                    <span className="text-xs text-gray-400">Step {authStep === "credentials" ? 1 : authStep === "rfid" ? 2 : authStep === "codes" ? 3 : 4}</span>
+                {/* RIGHT: informasi arsip (detail) */}
+                <div className="sm:col-span-2 flex flex-col gap-3">
+                  <div className="text-sm font-semibold text-white">
+                    Informasi Arsip
+                  </div>
+                  <div className="text-sm text-gray-100 bg-zinc-800 rounded-md p-3 shadow-inner">
+                    {selected.description}
                   </div>
 
-                  {/* CREDENTIALS */}
-                  {authStep === "credentials" && (
-                    <form onSubmit={verifyCredentials} className="space-y-2">
-                      <label className="text-xs text-gray-300">NRP / Email</label>
-                      <input
-                        value={identifier}
-                        onChange={(e) => setIdentifier(e.target.value)}
-                        className="w-full px-3 py-2 rounded-md bg-zinc-900 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
-                        placeholder="NRP / Email"
-                        autoComplete="username"
-                      />
-                      <label className="text-xs text-gray-300">Password</label>
-                      <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full px-3 py-2 rounded-md bg-zinc-900 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
-                        placeholder="•••••"
-                        autoComplete="current-password"
-                      />
-                      {error && <div className="text-xs text-red-400">{error}</div>}
-                      {info && <div className="text-xs text-gray-400">{info}</div>}
-                      <div className="flex gap-2 mt-2">
-                        <button type="submit" disabled={loading} className="flex-1 px-3 py-1.5 rounded-md bg-yellow-500 text-black text-sm font-medium disabled:opacity-60">
-                          {loading ? "Memeriksa..." : "Lanjutkan"}
-                        </button>
-                        <button type="button" onClick={closeModal} className="px-3 py-1.5 rounded-md bg-zinc-800 text-xs text-gray-200">Batal</button>
-                      </div>
-                    </form>
-                  )}
-
-                  {/* RFID step (scan-only) */}
-                  {authStep === "rfid" && (
-                    <div className="space-y-2">
-                      <div className="text-xs text-gray-300">Langkah 2 — Scan RFID (hanya scan)</div>
-                      <div className="mx-auto w-20 h-20 rounded-md flex items-center justify-center border border-zinc-700 mb-1">
-                        <svg className={`w-8 h-8 ${rfidBusy ? "animate-pulse text-yellow-400" : "text-gray-400"}`} viewBox="0 0 24 24" fill="none">
-                          <path d="M12 2v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                          <path d="M12 18v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                          <path d="M4 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                          <path d="M16 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                        </svg>
-                      </div>
-                      <div className="text-xs text-gray-400">{info ?? "Silakan dekatkan kartu ke RFID reader terdaftar. Scanner harus keyboard-emulating."}</div>
-                      {error && <div className="text-xs text-red-400">{error}</div>}
-                      <div className="flex gap-2 mt-2">
-                        <button onClick={() => { setAuthStep("credentials"); setError(null); setInfo(null); }} className="px-3 py-1.5 rounded-md bg-zinc-800 text-xs text-gray-200">Kembali</button>
-                        <button onClick={() => { setError(null); setInfo("Menunggu scan RFID..."); window.focus(); }} className="px-3 py-1.5 rounded-md bg-zinc-800 text-xs text-gray-200">Siap</button>
-                      </div>
+                  <div className="mt-2 text-xs text-gray-400">
+                    <div>
+                      Tanggal:{" "}
+                      <span className="text-gray-200 font-semibold">
+                        {formatDate(selected.date)}
+                      </span>
                     </div>
-                  )}
-
-                  {/* CODES (after RFID): shown for Rahasia / Super Rahasia / Pembatasan */}
-                  {authStep === "codes" && (
-                    <div className="space-y-2">
-                      {selected.type === "Rahasia" && (
-                        <>
-                          <div className="text-xs text-gray-300">Masukkan kode enkripsi (diberikan pelapor)</div>
-                          <input
-                            value={encryptionInput}
-                            onChange={(e) => setEncryptionInput(e.target.value)}
-                            className="w-full px-3 py-2 rounded-md bg-zinc-900 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
-                            placeholder="ENCR-XXXX"
-                          />
-                        </>
-                      )}
-
-                      {selected.type === "Super Rahasia" && (
-                        <>
-                          <div className="text-xs text-gray-300">Masukkan kode enkripsi</div>
-                          <input
-                            value={encryptionInput}
-                            onChange={(e) => setEncryptionInput(e.target.value)}
-                            className="w-full px-3 py-2 rounded-md bg-zinc-900 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
-                            placeholder="ENCR-XXXX"
-                          />
-                          <div className="text-xs text-gray-300">Masukkan kunci pelapor (diberikan pelapor)</div>
-                          <input
-                            value={reporterInput}
-                            onChange={(e) => setReporterInput(e.target.value)}
-                            className="w-full px-3 py-2 rounded-md bg-zinc-900 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
-                            placeholder="Kunci Pelapor"
-                          />
-                        </>
-                      )}
-
-                      {selected.type === "Pembatasan" && (
-                        <>
-                          <div className="text-xs text-gray-300">Masukkan kode pembatasan/admin</div>
-                          <input
-                            value={adminInput}
-                            onChange={(e) => setAdminInput(e.target.value)}
-                            className="w-full px-3 py-2 rounded-md bg-zinc-900 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
-                            placeholder="Kode Pembatasan"
-                          />
-                        </>
-                      )}
-
-                      {error && <div className="text-xs text-red-400">{error}</div>}
-                      <div className="flex gap-2 mt-2">
-                        <button onClick={finalizeAccess} disabled={loading} className="px-3 py-1.5 rounded-md bg-yellow-500 text-black text-sm">{loading ? "Memeriksa..." : "Verifikasi & Akses"}</button>
-                        <button onClick={() => { setAuthStep("rfid"); setError(null); }} className="px-3 py-1.5 rounded-md bg-zinc-800 text-xs text-gray-200">Kembali</button>
-                      </div>
+                    <div>
+                      Terakhir dibuka:{" "}
+                      <span className="text-gray-200 font-semibold">
+                        {selected.lastOpened}
+                      </span>
                     </div>
-                  )}
-
-                  {/* SUCCESS (short confirmation) */}
-                  {authStep === "success" && (
-                    <div className="text-center space-y-2">
-                      <div className="mx-auto w-10 h-10 rounded-full bg-green-600/20 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-green-400" viewBox="0 0 24 24" fill="none">
-                          <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </div>
-                      <div className="text-sm font-semibold text-white">Akses Diterima</div>
-                      <div className="text-xs text-gray-300">Autentikasi berhasil — menampilkan dokumen (demo)</div>
-                      <div className="flex gap-2 justify-center mt-2">
-                        <button onClick={() => { /* TODO: open document viewer */ closeModal(); }} className="px-3 py-1.5 rounded-md bg-yellow-500 text-black text-sm">Lanjut</button>
-                        <button onClick={closeModal} className="px-3 py-1.5 rounded-md bg-zinc-800 text-xs text-gray-200">Tutup</button>
-                      </div>
+                    <div>
+                      Jumlah views:{" "}
+                      <span className="text-gray-200 font-semibold">
+                        {selected.views}
+                      </span>
                     </div>
-                  )}
+                  </div>
+
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={() => {
+                        // placeholder: buka dokumen / viewer - integrasikan ke backend / viewer nanti
+                        alert(
+                          "Buka viewer (integrasikan backend/route viewer)."
+                        );
+                      }}
+                      className="px-3 py-1.5 rounded-md bg-yellow-500 text-black text-sm"
+                    >
+                      Buka Dokumen
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        // placeholder: download / request backend
+                        alert("Download (integrasikan backend).");
+                      }}
+                      className="px-3 py-1.5 rounded-md bg-zinc-800 text-xs text-gray-200"
+                    >
+                      Download
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* small footer hint */}
-              <div className="mt-4 text-xs text-gray-500 text-center">Autentikasi aman — ganti mock validation dengan API server pada implementasi nyata.</div>
+              <div className="mt-4 text-xs text-gray-500 text-center">
+                Tampilan detail — history & aset hanya muncul setelah
+                autentikasi. Hubungkan fungsi autentikasi ke backend untuk
+                produksi.
+              </div>
             </div>
           </div>
         )}

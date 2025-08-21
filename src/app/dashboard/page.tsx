@@ -1,7 +1,7 @@
 "use client";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useMediaQuery } from "react-responsive";
 
 import { FileText, Shield, Users, Eye } from "lucide-react";
@@ -26,7 +26,21 @@ ChartJS.register(
 );
 
 // ===================== DUMMY DATA =====================
-const chartData = {
+type ChartData = {
+  labels: string[];
+  users: number[];
+  archives: number[];
+  accesses: number[];
+};
+
+type ChartDataSet = {
+  daily: ChartData;
+  weekly: ChartData;
+  monthly: ChartData;
+  yearly: ChartData;
+};
+
+const chartData: ChartDataSet = {
   daily: {
     labels: ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"],
     users: [10, 12, 8, 15, 9, 7, 11],
@@ -74,7 +88,11 @@ const chartOptions = {
   },
 };
 
-function filterByDateRange(data, start, end) {
+function filterByDateRange(
+  data: ChartData,
+  start: number,
+  end: number
+): ChartData {
   return {
     labels: data.labels.slice(start, end + 1),
     users: data.users.slice(start, end + 1),
@@ -83,13 +101,16 @@ function filterByDateRange(data, start, end) {
   };
 }
 
-// ===================== MAIN =====================
 export default function DashboardPage() {
-  const [filter, setFilter] = useState("daily");
-  const [range, setRange] = useState([0, chartData[filter].labels.length - 1]);
+  type FilterType = "daily" | "weekly" | "monthly" | "yearly";
+  const [filter, setFilter] = useState<FilterType>("daily");
+  const [range, setRange] = useState<[number, number]>([
+    0,
+    chartData["daily"].labels.length - 1,
+  ]);
   const isMobile = useMediaQuery({ maxWidth: 640 });
 
-  React.useEffect(() => {
+  useEffect(() => {
     setRange([0, chartData[filter].labels.length - 1]);
   }, [filter]);
 
@@ -166,7 +187,7 @@ export default function DashboardPage() {
               {filter === "yearly" && "Statistik tahunan: 2022 - 2025."}
             </div>
             <Bar
-              options={chartOptions}
+              // options={chartOptions}
               data={data}
               className="bg-zinc-900 rounded-xl p-4"
             />
