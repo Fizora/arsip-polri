@@ -1,103 +1,377 @@
-import Image from "next/image";
+"use client";
+import React, { useEffect, useRef, useState } from "react";
 
-export default function Home() {
+/**
+ * Minimal 2-step login:
+ *  - Step 1: NRP/Email + Password
+ *  - Step 2: Scan-only RFID (keyboard-emulating scanner)
+ *
+ * Notes:
+ *  - Ganti bagian TODO dengan panggilan API server-side yang aman.
+ *  - Tombol teks dibuat kecil agar minimalis.
+ *  - Logo besar di tengah atas card sesuai permintaan.
+ */
+
+export default function MinimalLogin2FA() {
+  type Step = "credentials" | "rfid" | "success";
+  const [step, setStep] = useState<Step>("credentials");
+
+  // credentials
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+
+  // UI state
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+
+  // scanner buffer
+  const bufferRef = useRef<string>("");
+  const lastKeyTimeRef = useRef<number>(0);
+  const timeoutRef = useRef<number | null>(null);
+
+  // accessibility live region
+  const liveRef = useRef<HTMLDivElement | null>(null);
+
+  // --- Step 1: verify credentials (mock) ---
+  async function verifyCredentials(e?: React.FormEvent) {
+    e?.preventDefault();
+    setError(null);
+
+    if (!identifier.trim() || !password.trim()) {
+      setError("NRP/Email dan Password wajib diisi.");
+      return;
+    }
+
+    setLoading(true);
+    setInfo("Memeriksa kredensial...");
+    // TODO: ganti dengan panggilan API server-side (HTTPS)
+    await new Promise((r) => setTimeout(r, 600));
+    // contoh simulasi sukses
+    setLoading(false);
+    setInfo(null);
+    setStep("rfid");
+  }
+
+  // --- Step 2: verify RFID (mock) ---
+  async function verifyRfidCode(code: string) {
+    setLoading(true);
+    setError(null);
+    setInfo("Memverifikasi RFID...");
+    // TODO: kirim code ke server untuk validasi device/ownership
+    await new Promise((r) => setTimeout(r, 700));
+
+    // simulasi rule: valid jika panjang >= 4 dan bukan '0000'
+    if (code && code.length >= 4 && code !== "0000") {
+      setLoading(false);
+      setInfo(null);
+      setStep("success");
+    } else {
+      setLoading(false);
+      setError("RFID tidak valid. Silakan scan ulang.");
+      setInfo("Menunggu scan RFID...");
+    }
+  }
+
+  // --- global keydown listener only when step === "rfid" ---
+  useEffect(() => {
+    if (step !== "rfid") return;
+
+    function resetBuffer() {
+      bufferRef.current = "";
+      lastKeyTimeRef.current = 0;
+      if (timeoutRef.current) {
+        window.clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (loading) return; // ignore while verifying
+
+      const now = Date.now();
+
+      // if gap between keys too long -> assume human typing -> reset
+      if (lastKeyTimeRef.current && now - lastKeyTimeRef.current > 1000) {
+        bufferRef.current = "";
+      }
+      lastKeyTimeRef.current = now;
+
+      // Enter submits buffer
+      if (e.key === "Enter") {
+        const code = bufferRef.current.trim();
+        bufferRef.current = "";
+        lastKeyTimeRef.current = 0;
+        if (code) {
+          verifyRfidCode(code);
+        } else {
+          setError("Tidak ada data yang ter-scan. Coba lagi.");
+        }
+        e.preventDefault();
+        return;
+      }
+
+      // Accept printable characters only (scanner usually emits them)
+      if (e.key.length === 1) {
+        bufferRef.current += e.key;
+      }
+
+      // safety: clear buffer after 1.2s inactivity
+      if (timeoutRef.current) {
+        window.clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = window.setTimeout(() => {
+        bufferRef.current = "";
+        lastKeyTimeRef.current = 0;
+      }, 1200);
+    }
+
+    // set instruction
+    setInfo("Menunggu scan RFID... (gunakan RFID reader terdaftar)");
+    setError(null);
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      resetBuffer();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, loading]);
+
+  function resetAll() {
+    setStep("credentials");
+    setIdentifier("");
+    setPassword("");
+    setLoading(false);
+    setError(null);
+    setInfo(null);
+  }
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+      <div className="w-full max-w-lg">
+        <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 sm:p-10 shadow-xl">
+          {/* Logo besar di tengah */}
+          <div className="flex justify-center">
+            <img
+              src="/logo.png"
+              alt="Logo Polri"
+              className="w-36 h-36 sm:w-48 sm:h-48 object-cover rounded-full drop-shadow-md"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          </div>
+
+          {/* minimal header text under logo */}
+          <div className="text-center mt-4 mb-6">
+            <h1 className="text-xl sm:text-2xl font-semibold text-white">
+              Sistem Arsip Digital
+            </h1>
+            <p className="text-xs text-gray-400 mt-1">
+              Akses internal personel — autentikasi 2 langkah
+            </p>
+          </div>
+
+          {/* content area */}
+          <div>
+            {step === "credentials" && (
+              <form onSubmit={verifyCredentials} className="space-y-4">
+                <div>
+                  <label className="text-xs text-gray-300 block mb-1">
+                    NRP / Email
+                  </label>
+                  <input
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md bg-zinc-800 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                    placeholder="Masukkan NRP / Email"
+                    autoComplete="username"
+                    aria-label="nrp-email"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-300 block mb-1">
+                    Password
+                  </label>
+                  <input
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    type="password"
+                    className="w-full px-3 py-2 rounded-md bg-zinc-800 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                    placeholder="••••••"
+                    autoComplete="current-password"
+                    aria-label="password"
+                  />
+                </div>
+
+                {error && <div className="text-xs text-red-400">{error}</div>}
+                {info && <div className="text-xs text-gray-400">{info}</div>}
+
+                <div className="flex gap-2 items-center mt-2">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 px-3 py-2 rounded-md bg-yellow-500 hover:bg-yellow-600 text-black text-sm font-medium disabled:opacity-60"
+                  >
+                    {loading ? "Memeriksa..." : "Lanjutkan"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={resetAll}
+                    className="px-3 py-2 rounded-md bg-zinc-800 text-xs text-gray-200 hover:bg-zinc-700"
+                  >
+                    Batal
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {step === "rfid" && (
+              <div className="space-y-4">
+                <div className="text-center">
+                  <div className="text-sm font-semibold text-white">
+                    Verifikasi 2-Langkah
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    Langkah 2 — Scan RFID (hanya scan)
+                  </div>
+                </div>
+
+                {/* large minimal scan area */}
+                <div className="mt-3 p-4 rounded-lg bg-zinc-800 border border-zinc-700 text-center">
+                  <div className="text-sm text-gray-200 mb-3">
+                    {loading
+                      ? "Memverifikasi..."
+                      : info ?? "Silakan dekatkan kartu ke RFID reader"}
+                  </div>
+
+                  <div className="mx-auto w-28 h-28 sm:w-32 sm:h-32 rounded-md flex items-center justify-center border border-zinc-700 mb-3">
+                    <svg
+                      className={`w-10 h-10 ${
+                        loading
+                          ? "animate-pulse text-yellow-400"
+                          : "text-gray-400"
+                      }`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <path
+                        d="M12 2v4"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M12 18v4"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M4 12h4"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M16 12h4"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </div>
+
+                  {error && (
+                    <div className="text-xs text-red-400 mb-2">{error}</div>
+                  )}
+
+                  <div className="flex gap-2 justify-center">
+                    <button
+                      onClick={() => {
+                        // return to credentials
+                        setStep("credentials");
+                        setError(null);
+                        setInfo(null);
+                      }}
+                      className="px-3 py-1.5 rounded-md bg-zinc-800 text-xs text-gray-200 hover:bg-zinc-700"
+                    >
+                      Kembali
+                    </button>
+
+                    {/* small helper to re-trigger instruction */}
+                    <button
+                      onClick={() => {
+                        setError(null);
+                        setInfo("Menunggu scan RFID...");
+                        // focusing window to encourage capturing events (scanner typically works regardless)
+                        window.focus();
+                      }}
+                      className="px-3 py-1.5 rounded-md bg-zinc-800 text-xs text-gray-200 hover:bg-zinc-700"
+                    >
+                      Siap
+                    </button>
+                  </div>
+                </div>
+
+                <div className="text-xs text-gray-500">
+                  Hanya pemindaian RFID dari reader terdaftar yang diterima —
+                  tidak ada input manual.
+                </div>
+              </div>
+            )}
+
+            {step === "success" && (
+              <div className="space-y-4 text-center">
+                <div className="mx-auto w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <svg
+                    className="w-6 h-6 text-green-400"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <path
+                      d="M5 13l4 4L19 7"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+                <div className="text-sm font-semibold text-white">
+                  Akses Diterima
+                </div>
+                <div className="text-xs text-gray-300">
+                  Autentikasi dua langkah berhasil.
+                </div>
+
+                <div className="flex gap-2 justify-center mt-2">
+                  <button
+                    onClick={() => {
+                      // TODO: set session / redirect
+                      alert("TODO: redirect to dashboard / set session");
+                    }}
+                    className="px-3 py-1.5 rounded-md bg-yellow-500 text-black text-sm font-medium"
+                  >
+                    Masuk
+                  </button>
+                  <button
+                    onClick={resetAll}
+                    className="px-3 py-1.5 rounded-md bg-zinc-800 text-xs text-gray-200"
+                  >
+                    Keluar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* live region for screen readers */}
+          <div ref={liveRef} aria-live="polite" className="sr-only">
+            {info ?? error ?? ""}
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
     </div>
   );
 }
