@@ -270,46 +270,6 @@ export default function ReportPage() {
       <main className="flex-1 p-4 sm:p-6 lg:p-10 text-gray-200">
         <Header />
 
-        <section className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">
-              Dashboard Pelaporan Arsip
-            </h1>
-            <p className="text-gray-400 mt-1 text-sm">
-              Riwayat laporan arsip dari anggota — status{" "}
-              <span className="font-semibold">pending</span> berarti belum
-              diverifikasi admin.
-            </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
-            <input
-              type="text"
-              placeholder="Cari laporan / pelapor..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 focus:ring-2 focus:ring-yellow-400 w-full sm:w-64"
-              aria-label="Cari laporan"
-            />
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as any)}
-              className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 focus:ring-2 focus:ring-yellow-400 w-full sm:w-auto"
-              aria-label="Filter status"
-            >
-              <option value="all">Semua</option>
-              <option value="pending">Pending</option>
-              <option value="verified">Verified</option>
-            </select>
-            <button
-              onClick={() => setShowPopup(true)}
-              className="px-4 py-2 rounded bg-yellow-400 text-black font-semibold hover:bg-yellow-500 w-full sm:w-auto"
-            >
-              + Lapor Arsip
-            </button>
-          </div>
-        </section>
-
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <div className="bg-zinc-900/80 border border-zinc-800 p-4 rounded-lg">
             <div className="text-xs text-gray-300">Total Laporan</div>
@@ -423,14 +383,14 @@ export default function ReportPage() {
                     onChange={(e) => setFormTitle(e.target.value)}
                     type="text"
                     placeholder="Contoh: Laporan Operasi Khusus"
-                    className="px-3 py-2 rounded bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-white w-full"
+                    className="px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-sm text-white w-full"
                   />
 
                   <label className="text-sm text-gray-300">Jenis Arsip</label>
                   <select
                     value={formClassification}
                     onChange={(e) => setFormClassification(e.target.value)}
-                    className="px-3 py-2 rounded bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-white"
+                    className="px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-sm text-white"
                   >
                     <option value="Biasa">Biasa</option>
                     <option value="Rahasia">Rahasia</option>
@@ -458,7 +418,7 @@ export default function ReportPage() {
                     onChange={(e) => setFormDescription(e.target.value)}
                     rows={6}
                     placeholder="Tuliskan deskripsi laporan secara detail..."
-                    className="px-3 py-2 rounded bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-white w-full"
+                    className="px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-sm text-white w-full"
                   />
                 </div>
 
@@ -469,7 +429,7 @@ export default function ReportPage() {
                     onChange={(e) => setFormReporterName(e.target.value)}
                     type="text"
                     placeholder="Nama lengkap"
-                    className="px-3 py-2 rounded bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-white w-full"
+                    className="px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-sm text-white w-full"
                   />
 
                   <label className="text-sm text-gray-300">Unit / Satuan</label>
@@ -478,7 +438,7 @@ export default function ReportPage() {
                     onChange={(e) => setFormReporterUnit(e.target.value)}
                     type="text"
                     placeholder="Contoh: Satintel"
-                    className="px-3 py-2 rounded bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-white w-full"
+                    className="px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-sm text-white w-full"
                   />
 
                   <label className="text-sm text-gray-300">Lampiran</label>
@@ -487,7 +447,7 @@ export default function ReportPage() {
                     onChange={handleFilesChange}
                     type="file"
                     multiple
-                    className="text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-yellow-400 file:text-black hover:file:bg-yellow-500"
+                    className="text-gray-300 file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-yellow-400 file:text-black hover:file:bg-yellow-500"
                   />
                   <div className="text-xs text-gray-400 mt-1">
                     Validasi ukuran & upload dilakukan di backend nanti.
@@ -499,7 +459,7 @@ export default function ReportPage() {
                   <button
                     type="button"
                     onClick={() => setShowPopup(false)}
-                    className="w-full sm:w-auto px-4 py-3 rounded bg-zinc-800 text-gray-300 hover:bg-zinc-700"
+                    className="w-full sm:w-auto px-3 py-2 rounded bg-zinc-800 text-gray-300 text-sm hover:bg-zinc-700"
                   >
                     Batal
                   </button>

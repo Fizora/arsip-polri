@@ -45,12 +45,27 @@ export default function MinimalLogin2FA() {
 
     setLoading(true);
     setInfo("Memeriksa kredensial...");
-    // TODO: ganti dengan panggilan API server-side (HTTPS)
-    await new Promise((r) => setTimeout(r, 600));
-    // contoh simulasi sukses
-    setLoading(false);
-    setInfo(null);
-    setStep("rfid");
+    try {
+      // Supabase Auth: sign in with email/password
+      const { supabase } = await import("@/lib/supabaseClient");
+      const { error } = await supabase.auth.signInWithPassword({
+        email: identifier,
+        password,
+      });
+      if (error) {
+        setLoading(false);
+        setError("Login gagal: " + error.message);
+        setInfo(null);
+        return;
+      }
+      setLoading(false);
+      setInfo(null);
+      setStep("rfid");
+    } catch (err: any) {
+      setLoading(false);
+      setError("Terjadi kesalahan koneksi.");
+      setInfo(null);
+    }
   }
 
   // --- Step 2: verify RFID (mock) ---
@@ -348,8 +363,7 @@ export default function MinimalLogin2FA() {
                 <div className="flex gap-2 justify-center mt-2">
                   <button
                     onClick={() => {
-                      // TODO: set session / redirect
-                      alert("TODO: redirect to dashboard / set session");
+                      window.location.href = "/dashboard";
                     }}
                     className="px-3 py-1.5 rounded-md bg-yellow-500 text-black text-sm font-medium"
                   >

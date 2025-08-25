@@ -57,6 +57,7 @@ const archiveData = [
         src: "/demo/file1.pdf",
       },
     ],
+    adminCode: "ADMIN-1234",
   },
 ];
 
@@ -88,6 +89,7 @@ type Archive = {
   bookmarked: boolean;
   encryptionCode?: string;
   reporterKey?: string;
+  adminCode?: string;
   history?: ArchiveHistory[];
   assets?: ArchiveAsset[];
 };
@@ -103,10 +105,11 @@ function formatDate(dateStr: string): string {
 const PAGE_SIZE = 9;
 
 export default function ArchivePage() {
-  const [data, setData] = useState<Archive[]>(archiveData);
   const [search, setSearch] = useState<string>("");
   const [page, setPage] = useState<number>(1);
   const [selected, setSelected] = useState<Archive | null>(null);
+  // Perbaikan: data dan setData agar toggleBookmark dan update views tidak error
+  const [data, setData] = useState<Archive[]>(archiveData);
 
   // authentication modal states
   const [authStep, setAuthStep] = useState<
@@ -956,9 +959,7 @@ export default function ArchivePage() {
               </div>
 
               <div className="mt-4 text-xs text-gray-500 text-center">
-                Tampilan detail — history & aset hanya muncul setelah
-                autentikasi. Hubungkan fungsi autentikasi ke backend untuk
-                produksi.
+                ARSIP Polri — Semua data dan akses dalam pengawasan penuh.
               </div>
             </div>
           </div>
