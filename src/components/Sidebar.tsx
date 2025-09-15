@@ -11,10 +11,24 @@ import {
   LogOut,
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
+import { Logout } from "@/service/auth.service";
+import { useRouter } from "next/navigation";
 
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    const res = await Logout();
+
+    if (!res.status) {
+      console.error(!res.message);
+    }
+
+    router.push("/");
+  };
 
   const Overlay = () => (
     <div
@@ -72,7 +86,7 @@ export default function Sidebar() {
       >
         {/* Logo */}
         <div className="flex items-center justify-center h-24 border-b border-zinc-800">
-          <img src="/logo.png" alt="Logo" className="w-14 h-14" />
+          <Image src="/logo.png" alt="Logo" width={54} height={54} />
           <span className="ml-3 font-bold text-white text-lg tracking-tight">
             ARSIP POLRI
           </span>
@@ -117,6 +131,7 @@ export default function Sidebar() {
         {/* Logout di DESKTOP → tetap di bawah */}
         <div className="hidden lg:block px-6 pb-8">
           <button
+            onClick={handleLogout}
             className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-gray-300 hover:bg-red-600 hover:text-white transition text-base font-semibold active:scale-95"
             style={{ touchAction: "manipulation" }}
             aria-label="Logout"

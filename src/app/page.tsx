@@ -1,5 +1,7 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
+import { AuthLogin } from "@/service/auth.service";
+import Image from "next/image";
 
 /**
  * Minimal 2-step login:
@@ -46,24 +48,24 @@ export default function MinimalLogin2FA() {
     setLoading(true);
     setInfo("Memeriksa kredensial...");
     try {
-      // Supabase Auth: sign in with email/password
-      const { supabase } = await import("@/lib/supabaseClient");
-      const { error } = await supabase.auth.signInWithPassword({
-        email: identifier,
-        password,
-      });
-      if (error) {
+      const res = await AuthLogin({ identifier, password });
+
+      if (!res.status) {
         setLoading(false);
-        setError("Login gagal: " + error.message);
+        setError("Login gagal: " + res.message);
         setInfo(null);
         return;
       }
       setLoading(false);
       setInfo(null);
       setStep("rfid");
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLoading(false);
-      setError("Terjadi kesalahan koneksi.");
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Terjadi Kesalahan Koneksi");
+      }
       setInfo(null);
     }
   }
@@ -167,12 +169,15 @@ export default function MinimalLogin2FA() {
       <div className="w-full max-w-lg">
         <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 sm:p-10 shadow-xl">
           {/* Logo besar di tengah */}
-          <div className="flex justify-center">
-            <img
-              src="/logo.png"
-              alt="Logo Polri"
-              className="w-36 h-36 sm:w-48 sm:h-48 object-cover rounded-full drop-shadow-md"
-            />
+          <div className="w-fit mx-auto">
+            <div className="relative w-36 h-36 sm:w-48 sm:h-48 flex justify-center items-center">
+              <Image
+                src="/logo.png"
+                alt="Logo Polri"
+                fill
+                className="object-cover rounded-full drop-shadow-md"
+              />
+            </div>
           </div>
 
           {/* minimal header text under logo */}
